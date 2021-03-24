@@ -1,0 +1,24 @@
+title: Jared Hocutt
+baseURL: http://blog.jaredhocutt.com/
+
+languageCode: en-us
+defaultContentLanguage: en-us
+
+theme: tranquilpeak
+paginate: 7
+canonifyurls: true
+
+permalinks:
+  post: /blog/:title
+
+taxonomies:
+  tag: tags
+  category: categories
+  archive: archives
+
+author:
+  name: Jared Hocutt
+  job: Red Hat
+  location: North Carolina
+  gravatarEmail: jaredhocutt@gmail.com
+  twitter: jaredhocutt

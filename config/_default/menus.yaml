@@ -1,0 +1,53 @@
+main:
+  - identifier: home
+    name: Home
+    url: /
+    weight: 1
+    pre: <i class="sidebar-button-icon fa fa-lg fa-home"></i>
+  - identifier: about
+    name: About
+    url: /about
+    weight: 2
+    pre: <i class="sidebar-button-icon fa fa-lg fa-address-card"></i>
+  - identifier: categories
+    name: Categories
+    url: /categories
+    weight: 3
+    pre: <i class="sidebar-button-icon fa fa-lg fa-bookmark"></i>
+  - identifier: tags
+    name: Tags
+    url: /tags
+    weight: 4
+    pre: <i class="sidebar-button-icon fa fa-lg fa-tags"></i>
+  - identifier: archives
+    name: Archives
+    url: /archives
+    weight: 5
+    pre: <i class="sidebar-button-icon fa fa-lg fa-archive"></i>
+links:
+  - identifier: github
+    name: GitHub
+    url: https://github.com/jaredhocutt
+    weight: 1
+    pre: <i class="sidebar-button-icon fa fa-lg fa-github"></i>
+  - identifier: gitlab
+    name: GitLab
+    url: https://gitlab.com/jaredhocutt
+    weight: 2
+    pre: <i class="sidebar-button-icon fa fa-lg fa-gitlab"></i>
+  - identifier: twitter
+    name: Twitter
+    url: https://twitter.com/jaredhocutt
+    weight: 3
+    pre: <i class="sidebar-button-icon fa fa-lg fa-twitter"></i>
+  - identifier: linkedin
+    name: LinkedIn
+    url: https://www.linkedin.com/in/jaredhocutt/
+    weight: 4
+    pre: <i class="sidebar-button-icon fa fa-lg fa-linkedin-square"></i>
+misc:
+  - identifier: rss
+    name: RSS
+    url: /index.xml
+    weight: 0
+    pre: <i class="sidebar-button-icon fa fa-lg fa-rss"></i>
