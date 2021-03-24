@@ -1,0 +1,231 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=generator content="Hugo 0.81.0 with theme Tranquilpeak 0.4.8-BETA"><meta name=author content="Jared Hocutt"><meta name=keywords content><meta name=description content="
+This post is part of a multi-part series on how to use NetApp storage
+platforms to present persistent volumes in Kubernetes. The other posts in this series
+are:
+
+Part 1: Using ONTAP and NFS
+Part 2: Using ONTAP and iSCSI
+
+
+Kubernetes is an open source project for automating deployment, operations, and
+scaling of containerized applications that came out of Google in June 2014. The
+community around Kubernetes has since exploded and is being adopted as one of
+the leading container deployment solutions.
+A problem many run into with using containerized applications is what to do
+with their data. Data written inside of a container is ephemeral and only exist
+for the lifetime of the container it&rsquo;s written in. To solve this problem,
+Kubernetes offers a PersistentVolume subsystem that abstracts the details of
+how storage is provided from how it is consumed.
+The Kubernetes PersistentVolume API provides several plugins for integrating
+your storage into Kubernetes for containers to consume. In this post, we&rsquo;ll
+focus on how to use the NFS plugin with ONTAP. More specifically, we will
+use a slightly modified version of the NFS example
+in the Kubernetes source code."><meta property="og:description" content="
+This post is part of a multi-part series on how to use NetApp storage
+platforms to present persistent volumes in Kubernetes. The other posts in this series
+are:
+
+Part 1: Using ONTAP and NFS
+Part 2: Using ONTAP and iSCSI
+
+
+Kubernetes is an open source project for automating deployment, operations, and
+scaling of containerized applications that came out of Google in June 2014. The
+community around Kubernetes has since exploded and is being adopted as one of
+the leading container deployment solutions.
+A problem many run into with using containerized applications is what to do
+with their data. Data written inside of a container is ephemeral and only exist
+for the lifetime of the container it&rsquo;s written in. To solve this problem,
+Kubernetes offers a PersistentVolume subsystem that abstracts the details of
+how storage is provided from how it is consumed.
+The Kubernetes PersistentVolume API provides several plugins for integrating
+your storage into Kubernetes for containers to consume. In this post, we&rsquo;ll
+focus on how to use the NFS plugin with ONTAP. More specifically, we will
+use a slightly modified version of the NFS example
+in the Kubernetes source code."><meta property="og:type" content="article"><meta property="og:title" content="NetApp Persistent Storage in Kubernetes: Using ONTAP and NFS"><meta name=twitter:title content="NetApp Persistent Storage in Kubernetes: Using ONTAP and NFS"><meta property="og:url" content="http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-nfs/"><meta property="twitter:url" content="http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-nfs/"><meta property="og:site_name" content="Jared Hocutt"><meta property="og:description" content="
+This post is part of a multi-part series on how to use NetApp storage
+platforms to present persistent volumes in Kubernetes. The other posts in this series
+are:
+
+Part 1: Using ONTAP and NFS
+Part 2: Using ONTAP and iSCSI
+
+
+Kubernetes is an open source project for automating deployment, operations, and
+scaling of containerized applications that came out of Google in June 2014. The
+community around Kubernetes has since exploded and is being adopted as one of
+the leading container deployment solutions.
+A problem many run into with using containerized applications is what to do
+with their data. Data written inside of a container is ephemeral and only exist
+for the lifetime of the container it&rsquo;s written in. To solve this problem,
+Kubernetes offers a PersistentVolume subsystem that abstracts the details of
+how storage is provided from how it is consumed.
+The Kubernetes PersistentVolume API provides several plugins for integrating
+your storage into Kubernetes for containers to consume. In this post, we&rsquo;ll
+focus on how to use the NFS plugin with ONTAP. More specifically, we will
+use a slightly modified version of the NFS example
+in the Kubernetes source code."><meta name=twitter:description content="
+This post is part of a multi-part series on how to use NetApp storage
+platforms to present persistent volumes in Kubernetes. The other posts in this series
+are:
+
+Part 1: Using ONTAP and NFS
+Part 2: Using ONTAP and iSCSI
+
+
+Kubernetes is an open source project for automating deployment, operations, and
+scaling of containerized applications that came out of Google in June 2014. The
+community around Kubernetes has since exploded and is being adopted as one of
+the leading container deployment solutions.
+A problem many run into with using containerized applications is what to do
+with their data. Data written inside of a container is ephemeral and only exist
+for the lifetime of the container it&rsquo;s written in. To solve this problem,
+Kubernetes offers a PersistentVolume subsystem that abstracts the details of
+how storage is provided from how it is consumed.
+The Kubernetes PersistentVolume API provides several plugins for integrating
+your storage into Kubernetes for containers to consume. In this post, we&rsquo;ll
+focus on how to use the NFS plugin with ONTAP. More specifically, we will
+use a slightly modified version of the NFS example
+in the Kubernetes source code."><meta property="og:locale" content="en-us"><meta property="article:published_time" content="2016-04-11T00:00:00"><meta property="article:modified_time" content="2016-04-11T00:00:00"><meta property="article:section" content="kubernetes"><meta property="article:section" content="storage"><meta property="article:tag" content="netapp"><meta property="article:tag" content="kubernetes"><meta name=twitter:card content="summary"><meta name=twitter:site content="@jaredhocutt"><meta name=twitter:creator content="@jaredhocutt"><meta property="og:image" content="http://jaredhocutt.com/thumbs/netapp.jpg"><meta property="twitter:image" content="http://jaredhocutt.com/thumbs/netapp.jpg"><meta property="og:image" content="https://www.gravatar.com/avatar/a2c1b2edd78d127a7477ff9602e7a504?s=640"><meta property="twitter:image" content="https://www.gravatar.com/avatar/a2c1b2edd78d127a7477ff9602e7a504?s=640"><title>NetApp Persistent Storage in Kubernetes: Using ONTAP and NFS</title><link rel=icon href=http://jaredhocutt.com/images/favicon.png><link rel=canonical href=http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-nfs/><link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css integrity="sha256-eZrrJcwDc/3uDhsdt61sL2oOBY362qM3lon1gyExkL0=" crossorigin=anonymous><link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/fancybox/2.1.4/jquery.fancybox.min.css integrity="sha256-vuXZ9LGmmwtjqFX1F+EKin1ThZMub58gKULUyf0qECk=" crossorigin=anonymous><link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/fancybox/2.1.4/helpers/jquery.fancybox-thumbs.min.css integrity="sha256-SEa4XYAHihTcEP1f5gARTB2K26Uk8PsndQYHQC1f4jU=" crossorigin=anonymous><link rel=stylesheet href=http://jaredhocutt.com/css/style-twzjdbqhmnnacqs0pwwdzcdbt8yhv8giawvjqjmyfoqnvazl0dalmnhdkvp7.min.css></head><body><div id=blog><header id=header data-behavior=2><i id=btn-open-sidebar class="fa fa-lg fa-bars"></i><div class=header-title><a class=header-title-link href=http://jaredhocutt.com/>Jared Hocutt</a></div><a class=header-right-picture href=http://jaredhocutt.com/#about><img class=header-picture src="https://www.gravatar.com/avatar/a2c1b2edd78d127a7477ff9602e7a504?s=90" alt="Author's picture"></a></header><nav id=sidebar data-behavior=2><div class=sidebar-container><div class=sidebar-profile><a href=http://jaredhocutt.com/><img class=sidebar-profile-picture src="https://www.gravatar.com/avatar/a2c1b2edd78d127a7477ff9602e7a504?s=110" alt="Author's picture"></a><h4 class=sidebar-profile-name>Jared Hocutt</h4></div><ul class=sidebar-buttons><li class=sidebar-button><a class=sidebar-button-link href=http://jaredhocutt.com/><i class="sidebar-button-icon fa fa-lg fa-home"></i><span class=sidebar-button-desc>Home</span></a></li><li class=sidebar-button><a class=sidebar-button-link href=http://jaredhocutt.com/about><i class="sidebar-button-icon fa fa-lg fa-address-card"></i><span class=sidebar-button-desc>About</span></a></li><li class=sidebar-button><a class=sidebar-button-link href=http://jaredhocutt.com/categories><i class="sidebar-button-icon fa fa-lg fa-bookmark"></i><span class=sidebar-button-desc>Categories</span></a></li><li class=sidebar-button><a class=sidebar-button-link href=http://jaredhocutt.com/tags><i class="sidebar-button-icon fa fa-lg fa-tags"></i><span class=sidebar-button-desc>Tags</span></a></li><li class=sidebar-button><a class=sidebar-button-link href=http://jaredhocutt.com/archives><i class="sidebar-button-icon fa fa-lg fa-archive"></i><span class=sidebar-button-desc>Archives</span></a></li></ul><ul class=sidebar-buttons><li class=sidebar-button><a class=sidebar-button-link href=https://github.com/jaredhocutt target=_blank rel=noopener><i class="sidebar-button-icon fa fa-lg fa-github"></i><span class=sidebar-button-desc>GitHub</span></a></li><li class=sidebar-button><a class=sidebar-button-link href=https://gitlab.com/jaredhocutt target=_blank rel=noopener><i class="sidebar-button-icon fa fa-lg fa-gitlab"></i><span class=sidebar-button-desc>GitLab</span></a></li><li class=sidebar-button><a class=sidebar-button-link href=https://twitter.com/jaredhocutt target=_blank rel=noopener><i class="sidebar-button-icon fa fa-lg fa-twitter"></i><span class=sidebar-button-desc>Twitter</span></a></li><li class=sidebar-button><a class=sidebar-button-link href=https://www.linkedin.com/in/jaredhocutt/ target=_blank rel=noopener><i class="sidebar-button-icon fa fa-lg fa-linkedin-square"></i><span class=sidebar-button-desc>LinkedIn</span></a></li></ul><ul class=sidebar-buttons><li class=sidebar-button><a class=sidebar-button-link href=http://jaredhocutt.com/index.xml><i class="sidebar-button-icon fa fa-lg fa-rss"></i><span class=sidebar-button-desc>RSS</span></a></li></ul></div></nav><div id=main data-behavior=2 class=hasCoverMetaIn><article class=post itemscope itemtype=http://schema.org/BlogPosting><div class="post-header main-content-wrap text-left"><h1 class=post-title itemprop=headline>NetApp Persistent Storage in Kubernetes: Using ONTAP and NFS</h1><div class="postShorten-meta post-meta"><time itemprop=datePublished datetime=2016-04-11T00:00:00Z>April 11, 2016</time>
+<span>in</span>
+<a class=category-link href=http://jaredhocutt.com/categories/kubernetes>kubernetes</a>,
+<a class=category-link href=http://jaredhocutt.com/categories/storage>storage</a></div></div><div class="post-content markdown" itemprop=articleBody><div class=main-content-wrap><blockquote><p>This post is part of a multi-part series on how to use NetApp storage
+platforms to present persistent volumes in Kubernetes. The other posts in this series
+are:</p><ul><li><a href=http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-nfs/>Part 1: Using ONTAP and NFS</a></li><li><a href=http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-iscsi/>Part 2: Using ONTAP and iSCSI</a></li></ul></blockquote><p>Kubernetes is an open source project for automating deployment, operations, and
+scaling of containerized applications that came out of Google in June 2014. The
+community around Kubernetes has since exploded and is being adopted as one of
+the leading container deployment solutions.</p><p>A problem many run into with using containerized applications is what to do
+with their data. Data written inside of a container is ephemeral and only exist
+for the lifetime of the container it&rsquo;s written in. To solve this problem,
+Kubernetes offers a <code>PersistentVolume</code> subsystem that abstracts the details of
+how storage is provided from how it is consumed.</p><p>The Kubernetes <code>PersistentVolume</code> API provides several plugins for integrating
+your storage into Kubernetes for containers to consume. In this post, we&rsquo;ll
+focus on how to use the <strong>NFS</strong> plugin with ONTAP. More specifically, we will
+use a slightly modified version of the <a href=https://github.com/kubernetes/kubernetes/tree/release-1.2/examples/nfs>NFS example</a>
+in the Kubernetes source code.</p><h2 id=environment>Environment</h2><h3 id=ontap>ONTAP</h3><p>For this post, a single node clustered Data ONTAP 8.3 simulator was used. The
+setup and commands used are no different than what would be used in a production
+setup using real hardware.</p><h3 id=kubernetes>Kubernetes</h3><p>In this setup, Kubernetes 1.2.2 was used in a single master and single node setup
+running on VirtualBox using Vagrant. For tutorials on how to run Kubernetes in
+nearly any configuration and on any platform you can imagine, check out the
+<a href=http://kubernetes.io/docs/getting-started-guides/>Kubernetes Getting Started guides</a>.</p><h2 id=setup>Setup</h2><h3 id=ontap-1>ONTAP</h3><p>The setup for ONTAP consists of the following steps.</p><ol><li>Create a Storage Virtual Machine (SVM) to host your NFS volumes</li><li>Enable NFS for the SVM created</li><li>Create a data LIF for Kubernetes to use</li><li>Create an export policy to allow the Kubernetes hosts to connect</li><li>Create an NFS volume for Kubernetes to use</li></ol><p>Of course you can skip some of these steps if you already have what you need there.</p><p>Here is an example that follows these steps:</p><p><strong>Create a Storage Virtual Machine (SVM) to host your NFS volumes</strong></p><figure class="highlight bash language-bash"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br><span class=line>2</span><br><span class=line>3</span><br></pre></td><td class=code><pre class="code-highlight language-bash"><code class=bash>VSIM::&gt; vserver create -vserver svm_kube_nfs -subtype default -rootvolume svm_kube_nfs_root -aggregate aggr1 -rootvolume-security-style unix -language C.UTF-8 -snapshot-policy default
+
+VSIM::&gt; vserver modify -vserver svm_kube_nfs -aggr-list aggr1</code></pre></td></tr></tbody></table></figure><p><strong>Enable NFS for the SVM created</strong></p><figure class="highlight bash language-bash"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br></pre></td><td class=code><pre class="code-highlight language-bash"><code class=bash>VSIM::&gt; vserver nfs create -vserver svm_kube_nfs -v3 disabled -v4.0 enabled -mount-rootonly disabled</code></pre></td></tr></tbody></table></figure><p><strong>Create a data LIF for Kubernetes to use</strong></p><p>The values specified in this example is specific to our ONTAP simulator. Update
+the appropriate values to match your environment.</p><figure class="highlight bash language-bash"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br></pre></td><td class=code><pre class="code-highlight language-bash"><code class=bash>VSIM::&gt; network interface create -vserver svm_kube_nfs -lif nfs_data -role data -data-protocol nfs -home-node VSIM-01 -home-port e0c -address 10.0.207.10 -netmask 255.255.255.0</code></pre></td></tr></tbody></table></figure><p><strong>Create an export policy to allow the Kubernetes hosts to connect</strong></p><p>In this case, we are allowing any host to connect by specifying <code>0.0.0.0/0</code> for
+<code>clientmatch</code>. It&rsquo;s unlikely you&rsquo;d want to do this in production and should
+instead set the value to match the IP range of your Kubernetes hosts.</p><figure class="highlight bash language-bash"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br></pre></td><td class=code><pre class="code-highlight language-bash"><code class=bash>VSIM::&gt; protocol export-policy rule create -vserver svm_kube_nfs -policyname default -protocol nfs4 -clientmatch 0.0.0.0/0 -rorule any -rwrule any</code></pre></td></tr></tbody></table></figure><p><strong>Create an NFS volume for Kubernetes to use</strong></p><figure class="highlight bash language-bash"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br></pre></td><td class=code><pre class="code-highlight language-bash"><code class=bash>VSIM::&gt; volume create -volume kube_nfs_0001 -junction-path /kube_nfs_0001 -vserver svm_kube_nfs -aggregate aggr1 -size 1GB -type RW -unix-permissions ---rwxrwxrwx</code></pre></td></tr></tbody></table></figure><h3 id=kubernetes-1>Kubernetes</h3><p>Now that we have an NFS volume, we need to let Kubernetes know about it. To do
+this, we will create a <code>PersistentVolume</code> and a <code>PersistentVolumeClaim</code>.</p><p>Create a <code>PersistentVolume</code> definition and save it as <code>nfs-pv.yaml</code>.</p><p><strong>nfs-pv.yaml</strong></p><figure class="highlight yaml language-yaml"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br><span class=line>2</span><br><span class=line>3</span><br><span class=line>4</span><br><span class=line>5</span><br><span class=line>6</span><br><span class=line>7</span><br><span class=line>8</span><br><span class=line>9</span><br><span class=line>10</span><br><span class=line>11</span><br><span class=line>12</span><br></pre></td><td class=code><pre class="code-highlight language-yaml"><code class=yaml>apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: kube_nfs_0001
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: 10.0.207.10  # set this to your data LIF IP address
+    path: &#34;/kube_nfs_0001&#34;</code></pre></td></tr></tbody></table></figure><p>Then create a <code>PersistentVolumeClaim</code> that uses the <code>PersistentVolume</code> and save
+it as <code>nfs-pvc.yaml</code>.</p><p><strong>nfs-pvc.yaml</strong></p><figure class="highlight yaml language-yaml"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br><span class=line>2</span><br><span class=line>3</span><br><span class=line>4</span><br><span class=line>5</span><br><span class=line>6</span><br><span class=line>7</span><br><span class=line>8</span><br><span class=line>9</span><br><span class=line>10</span><br></pre></td><td class=code><pre class="code-highlight language-yaml"><code class=yaml>kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: nfs-claim1
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi</code></pre></td></tr></tbody></table></figure><p>Now that we have a <code>PersistentVolume</code> definition and a <code>PersistentVolumeClaim</code>
+definition, we need to create them in Kubernetes.</p><figure class="highlight bash language-bash"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br><span class=line>2</span><br></pre></td><td class=code><pre class="code-highlight language-bash"><code class=bash>$ kubectl create -f nfs-pv.yaml
+$ kubectl create -f nfs-pvc.yaml</code></pre></td></tr></tbody></table></figure><p>At this point, we can spin up a container that uses the <code>PersistentVolumeClaim</code>
+we just created. To show this in action, we&rsquo;ll continue using the
+<a href=https://github.com/kubernetes/kubernetes/tree/release-1.2/examples/nfs>NFS example</a> from the Kubernetes source code.</p><p>First, we&rsquo;ll setup a &ldquo;fake&rdquo; backend that updates an <code>index.html</code> file every 5
+to 10 seconds with the current time and hostname of the pod doing the update.</p><p>Save the &ldquo;fake&rdquo; backend as <code>nfs-busybox-rc.yaml</code>.</p><p><strong>nfs-busybox-rc.yaml</strong></p><figure class="highlight yaml language-yaml"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br><span class=line>2</span><br><span class=line>3</span><br><span class=line>4</span><br><span class=line>5</span><br><span class=line>6</span><br><span class=line>7</span><br><span class=line>8</span><br><span class=line>9</span><br><span class=line>10</span><br><span class=line>11</span><br><span class=line>12</span><br><span class=line>13</span><br><span class=line>14</span><br><span class=line>15</span><br><span class=line>16</span><br><span class=line>17</span><br><span class=line>18</span><br><span class=line>19</span><br><span class=line>20</span><br><span class=line>21</span><br><span class=line>22</span><br><span class=line>23</span><br><span class=line>24</span><br><span class=line>25</span><br><span class=line>26</span><br><span class=line>27</span><br><span class=line>28</span><br><span class=line>29</span><br><span class=line>30</span><br><span class=line>31</span><br><span class=line>32</span><br></pre></td><td class=code><pre class="code-highlight language-yaml"><code class=yaml># This mounts the nfs volume claim into /mnt and continuously
+# overwrites /mnt/index.html with the time and hostname of the pod.
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: nfs-busybox
+spec:
+  replicas: 2
+  selector:
+    name: nfs-busybox
+  template:
+    metadata:
+      labels:
+        name: nfs-busybox
+    spec:
+      containers:
+      - image: busybox
+        command:
+          - sh
+          - -c
+          - &#39;while true; do date &gt; /mnt/index.html; hostname &gt;&gt; /mnt/index.html; sleep $(($RANDOM % 5 &#43; 5)); done&#39;
+        imagePullPolicy: IfNotPresent
+        name: busybox
+        volumeMounts:
+          # name must match the volume name below
+          - name: nfs-claim1
+            mountPath: &#34;/mnt&#34;
+      volumes:
+      - name: nfs-claim1
+        persistentVolumeClaim:
+          claimName: nfs-claim1</code></pre></td></tr></tbody></table></figure><p>Create the &ldquo;fake&rdquo; backend in Kubernetes.</p><figure class="highlight bash language-bash"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br></pre></td><td class=code><pre class="code-highlight language-bash"><code class=bash>$ kubectl create -f nfs-busybox-rc.yaml</code></pre></td></tr></tbody></table></figure><p>Next, we&rsquo;ll create a web server that also uses the NFS mount to serve the
+<code>index.html</code> file being generated by the &ldquo;fake&rdquo; backend.</p><p>The web server consists of a pod definition and a service definition.</p><p>Save the pod definition as <code>nfs-web-rc.yaml</code>.</p><p><strong>nfs-web-rc.yaml</strong></p><figure class="highlight yaml language-yaml"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br><span class=line>2</span><br><span class=line>3</span><br><span class=line>4</span><br><span class=line>5</span><br><span class=line>6</span><br><span class=line>7</span><br><span class=line>8</span><br><span class=line>9</span><br><span class=line>10</span><br><span class=line>11</span><br><span class=line>12</span><br><span class=line>13</span><br><span class=line>14</span><br><span class=line>15</span><br><span class=line>16</span><br><span class=line>17</span><br><span class=line>18</span><br><span class=line>19</span><br><span class=line>20</span><br><span class=line>21</span><br><span class=line>22</span><br><span class=line>23</span><br><span class=line>24</span><br><span class=line>25</span><br><span class=line>26</span><br><span class=line>27</span><br><span class=line>28</span><br><span class=line>29</span><br><span class=line>30</span><br></pre></td><td class=code><pre class="code-highlight language-yaml"><code class=yaml># This pod mounts the nfs volume claim into /usr/share/nginx/html and
+# serves a simple web page.
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: nfs-web
+spec:
+  replicas: 2
+  selector:
+    role: web-frontend
+  template:
+    metadata:
+      labels:
+        role: web-frontend
+    spec:
+      containers:
+      - name: web
+        image: nginx
+        ports:
+          - name: web
+            containerPort: 80
+        volumeMounts:
+            # name must match the volume name below
+            - name: nfs-claim1
+              mountPath: &#34;/usr/share/nginx/html&#34;
+      volumes:
+      - name: nfs-claim1
+        persistentVolumeClaim:
+          claimName: nfs-claim1</code></pre></td></tr></tbody></table></figure><p>Save the service definition as <code>nfs-web-service.yaml</code>.</p><p><strong>nfs-web-service.yaml</strong></p><figure class="highlight yaml language-yaml"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br><span class=line>2</span><br><span class=line>3</span><br><span class=line>4</span><br><span class=line>5</span><br><span class=line>6</span><br><span class=line>7</span><br><span class=line>8</span><br><span class=line>9</span><br></pre></td><td class=code><pre class="code-highlight language-yaml"><code class=yaml>kind: Service
+apiVersion: v1
+metadata:
+  name: nfs-web
+spec:
+  ports:
+    - port: 80
+  selector:
+    role: web-frontend</code></pre></td></tr></tbody></table></figure><p>Create the web server in Kubernetes.</p><figure class="highlight bash language-bash"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br><span class=line>2</span><br></pre></td><td class=code><pre class="code-highlight language-bash"><code class=bash>$ kubectl create -f nfs-web-rc.yaml
+$ kubectl create -f nfs-web-service.yaml</code></pre></td></tr></tbody></table></figure><p>Now that everything is setup and running, we can verify that it is working as
+expected. Using the busybox container we launched earlier, we can make a request
+to <code>nginx</code> to check that the data is being served properly.</p><figure class="highlight bash language-bash"><figcaption></figcaption><table><tbody><tr><td class=gutter><pre><span class=line>1</span><br><span class=line>2</span><br><span class=line>3</span><br><span class=line>4</span><br><span class=line>5</span><br><span class=line>6</span><br><span class=line>7</span><br><span class=line>8</span><br><span class=line>9</span><br><span class=line>10</span><br><span class=line>11</span><br><span class=line>12</span><br></pre></td><td class=code><pre class="code-highlight language-bash"><code class=bash>$ kubectl get pod -lname=nfs-busybox
+NAME                READY     STATUS    RESTARTS   AGE
+nfs-busybox-1u136   1/1       Running   0          1m
+nfs-busybox-gaqxs   1/1       Running   0          1m
+
+$ kubectl get services nfs-web
+NAME      CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+nfs-web   10.247.85.128   &lt;none&gt;        80/TCP    45s
+
+$ kubectl exec nfs-busybox-1u136 -- wget -qO- http://10.247.85.128
+Tue Apr 12 19:56:18 UTC 2016
+nfs-busybox-gaqxs</code></pre></td></tr></tbody></table></figure><p>As can be seen in this example, when we made a request to <code>nginx</code>, the last pod
+to have updated the <code>index.html</code> file was <code>nfs-busybox-gaqxs</code> at
+<code>Tue Apr 12 19:56:18 UTC 2016</code>. We can continue to make a request to <code>nginx</code>
+and watch this data get updated every 5-10 seconds.</p></div></div><div id=post-footer class="post-footer main-content-wrap"><div class=post-footer-tags><span class="text-color-light text-small">TAGGED IN</span><br><a class="tag tag--primary tag--small" href=http://jaredhocutt.com/tags/netapp/>netapp</a>
+<a class="tag tag--primary tag--small" href=http://jaredhocutt.com/tags/kubernetes/>kubernetes</a></div><div class=post-actions-wrap><nav><ul class="post-actions post-action-nav"><li class=post-action><a class="post-action-btn btn btn--default tooltip--top" href=http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-iscsi/ data-tooltip="NetApp Persistent Storage in Kubernetes: Using ONTAP and iSCSI"><i class="fa fa-angle-left"></i><span class="hide-xs hide-sm text-small icon-ml">NEXT</span></a></li><li class=post-action><a class="post-action-btn btn btn--default tooltip--top" href=http://jaredhocutt.com/blog/change-ubuntu-hostname/ data-tooltip="Change Ubuntu Hostname"><span class="hide-xs hide-sm text-small icon-mr">PREVIOUS</span>
+<i class="fa fa-angle-right"></i></a></li></ul></nav><ul class="post-actions post-action-share"><li class="post-action hide-lg hide-md hide-sm"><a class="post-action-btn btn btn--default btn-open-shareoptions" href=#btn-open-shareoptions><i class="fa fa-share-alt"></i></a></li><li class="post-action hide-xs"><a class="post-action-btn btn btn--default" target=new href="https://www.facebook.com/sharer/sharer.php?u=http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-nfs/"><i class="fa fa-facebook-official"></i></a></li><li class="post-action hide-xs"><a class="post-action-btn btn btn--default" target=new href="https://twitter.com/intent/tweet?text=http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-nfs/"><i class="fa fa-twitter"></i></a></li><li class=post-action><a class="post-action-btn btn btn--default" href=#><i class="fa fa-list"></i></a></li></ul></div></div></article><footer id=footer class=main-content-wrap><span class=copyrights>&copy; 2021 Jared Hocutt. All Rights Reserved</span></footer></div><div id=bottom-bar class=post-bottom-bar data-behavior=2><div class=post-actions-wrap><nav><ul class="post-actions post-action-nav"><li class=post-action><a class="post-action-btn btn btn--default tooltip--top" href=http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-iscsi/ data-tooltip="NetApp Persistent Storage in Kubernetes: Using ONTAP and iSCSI"><i class="fa fa-angle-left"></i><span class="hide-xs hide-sm text-small icon-ml">NEXT</span></a></li><li class=post-action><a class="post-action-btn btn btn--default tooltip--top" href=http://jaredhocutt.com/blog/change-ubuntu-hostname/ data-tooltip="Change Ubuntu Hostname"><span class="hide-xs hide-sm text-small icon-mr">PREVIOUS</span>
+<i class="fa fa-angle-right"></i></a></li></ul></nav><ul class="post-actions post-action-share"><li class="post-action hide-lg hide-md hide-sm"><a class="post-action-btn btn btn--default btn-open-shareoptions" href=#btn-open-shareoptions><i class="fa fa-share-alt"></i></a></li><li class="post-action hide-xs"><a class="post-action-btn btn btn--default" target=new href="https://www.facebook.com/sharer/sharer.php?u=http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-nfs/"><i class="fa fa-facebook-official"></i></a></li><li class="post-action hide-xs"><a class="post-action-btn btn btn--default" target=new href="https://twitter.com/intent/tweet?text=http://jaredhocutt.com/blog/netapp-persistent-storage-in-kubernetes-using-ontap-and-nfs/"><i class="fa fa-twitter"></i></a></li><li class=post-action><a class="post-action-btn btn btn--default" href=#><i class="fa fa-list"></i></a></li></ul></div></div><div id=share-options-bar class=share-options-bar data-behavior=2><i id=btn-close-shareoptions class="fa fa-close"></i><ul class=share-options><li class=share-option><a class=share-option-btn target=new href="https://www.facebook.com/sharer/sharer.php?u=http%3A%2F%2Fjaredhocutt.com%2Fblog%2Fnetapp-persistent-storage-in-kubernetes-using-ontap-and-nfs%2F"><i class="fa fa-facebook-official"></i><span>Share on Facebook</span></a></li><li class=share-option><a class=share-option-btn target=new href="https://twitter.com/intent/tweet?text=http%3A%2F%2Fjaredhocutt.com%2Fblog%2Fnetapp-persistent-storage-in-kubernetes-using-ontap-and-nfs%2F"><i class="fa fa-twitter"></i><span>Share on Twitter</span></a></li></ul></div><div id=share-options-mask class=share-options-mask></div></div><div id=about><div id=about-card><div id=about-btn-close><i class="fa fa-remove"></i></div><img id=about-card-picture src="https://www.gravatar.com/avatar/a2c1b2edd78d127a7477ff9602e7a504?s=110" alt="Author's picture"><h4 id=about-card-name>Jared Hocutt</h4><div id=about-card-job><i class="fa fa-briefcase"></i><br>Red Hat</div><div id=about-card-location><i class="fa fa-map-marker"></i><br>North Carolina</div></div></div><div id=cover style=background-image:url(http://jaredhocutt.com/images/cover.jpg)></div><script src=https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.4/jquery.min.js integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44=" crossorigin=anonymous></script><script src=https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js integrity="sha256-/BfiIkHlHoVihZdc6TFuj7MmJ0TWcWsMXkeDFwhi0zw=" crossorigin=anonymous></script><script src=https://cdnjs.cloudflare.com/ajax/libs/fancybox/2.1.7/js/jquery.fancybox.min.js integrity="sha256-GEAnjcTqVP+vBp3SSc8bEDQqvWAZMiHyUSIorrWwH50=" crossorigin=anonymous></script><script src=http://jaredhocutt.com/js/script-pcw6v3xilnxydl1vddzazdverrnn9ctynvnxgwho987mfyqkuylcb1nlt.min.js></script><script lang=javascript>window.onload=updateMinWidth,window.onresize=updateMinWidth,document.getElementById("sidebar").addEventListener("transitionend",updateMinWidth);function updateMinWidth(){var b=document.getElementById("sidebar"),a=document.getElementById("main"),c,d,e;a.style.minWidth="",c=getComputedStyle(a).getPropertyValue("min-width"),d=getComputedStyle(b).getPropertyValue("width"),e=getComputedStyle(b).getPropertyValue("left"),a.style.minWidth=`calc(${c} - ${d} - ${e})`}</script><script>$(document).ready(function(){hljs.configure({classPrefix:'',useBR:!1}),$('pre.code-highlight > code, pre > code').each(function(b,a){$(this).hasClass('codeblock')||$(this).addClass('codeblock'),hljs.highlightBlock(a)})})</script></body></html>
